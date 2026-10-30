@@ -53,4 +53,4 @@ curl https://<the-link>.trycloudflare.com/v1/chat/completions \
   -d '{"model":"flisk-wolf","messages":[{"role":"user","content":"Write a Flisk service.json for a worker called emailer in the shop stack."}]}'
 ```
 
-The repository secret `WOLF_API_KEY` is the only key the portal accepts. The runner has no GPU, so a reply takes tens of seconds, and the model is downloaded again on every run (about 6 GB). The portal comes from [flisk-template-portal](https://github.com/flisk-sh/flisk-template-portal).
+The repository secret `WOLF_API_KEY` is the only key the portal accepts. The runner has no GPU, so a reply takes tens of seconds, and the model is downloaded again on every run (about 6 GB). The portal comes from [flisk-inference](https://github.com/flisk-sh/flisk-inference).

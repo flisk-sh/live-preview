@@ -22,8 +22,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: flisk-sh/flisk-template-portal
-          ref: 836b7687a8f0426eb07c9c39153e0fd89903b787
+          repository: flisk-sh/flisk-inference
+          ref: 898b92f225278397047545ba636321a5ee53a8b6
           path: portal
       - uses: oven-sh/setup-bun@v2
       - name: Install Ollama
