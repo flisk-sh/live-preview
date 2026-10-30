@@ -23,6 +23,14 @@ echo "url=$url" >> "${GITHUB_OUTPUT:-/dev/null}"
 echo "LIVE PREVIEW: $url"
 # An annotation is readable through the API while the job runs; the log and the summary are only available after it ends.
 echo "::notice title=Live preview link::$url"
+# The commit status is readable through the API at once, while the job is still running. Needs "statuses: write" on the job.
+publish_status() {
+  [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] || return 0
+  curl -fsS -m 15 -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+    "${GITHUB_API_URL:-https://api.github.com}/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+    -d "{\"state\":\"success\",\"context\":\"live-preview\",\"description\":\"Live link, up for $minutes minutes\",\"target_url\":\"$1\"}" >/dev/null 2>&1 || echo "::warning::could not publish the link as a commit status (needs statuses: write)"
+}
+publish_status "$url"
 
 fails=0; restarts=0; last_save=0
 while [ "$(date +%s)" -lt "$until_s" ]; do
@@ -33,7 +41,7 @@ while [ "$(date +%s)" -lt "$until_s" ]; do
   if [ "$fails" -ge 3 ]; then
     [ "$restarts" -ge 5 ] && { echo "::error::the tunnel failed 5 times; giving up"; exit 1; }
     restarts=$((restarts + 1)); echo "::warning::restarting the tunnel ($restarts); the link changes"
-    if bash "$here/tunnel.sh"; then fails=0; echo "NEW LINK: $(cat "$LP_DIR/url")"; echo "::notice title=Live preview link (restart $restarts)::$(cat "$LP_DIR/url")"; echo "- Link after restart $restarts: $(cat "$LP_DIR/url")" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; fi
+    if bash "$here/tunnel.sh"; then fails=0; echo "NEW LINK: $(cat "$LP_DIR/url")"; publish_status "$(cat "$LP_DIR/url")"; echo "::notice title=Live preview link (restart $restarts)::$(cat "$LP_DIR/url")"; echo "- Link after restart $restarts: $(cat "$LP_DIR/url")" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; fi
   fi
   if [ $(( $(date +%s) - last_save )) -ge 120 ]; then save; last_save=$(date +%s); fi
   sleep 30

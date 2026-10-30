@@ -10,6 +10,7 @@ on:
         default: "30"
 permissions:
   contents: read
+  statuses: write
 concurrency:
   group: flisk-wolf
   cancel-in-progress: false
