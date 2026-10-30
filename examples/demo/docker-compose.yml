@@ -1,0 +1,10 @@
+# A tiny stack for trying the action: a web page on port 8080 and a Postgres database.
+services:
+  web:
+    image: nginx:alpine
+    ports: ["8080:80"]
+  db:
+    image: postgres:16-alpine
+    container_name: demo-db
+    environment: { POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U app -d app"], interval: 2s, retries: 30 }

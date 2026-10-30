@@ -1,0 +1,41 @@
+name: self-test
+# Proves the action works for anyone: run 1 writes a row and shuts down, run 2 starts on a clean runner and must find the row.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  first-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the demo stack
+        run: |
+          docker compose -f examples/demo/docker-compose.yml up -d --wait
+          docker exec demo-db psql -U app -d app -c "create table if not exists marker(v text); delete from marker; insert into marker values ('run-${{ github.run_id }}');"
+      - id: lp
+        uses: ./
+        with:
+          minutes: 1
+          pg-container: demo-db
+          state-key: ${{ secrets.STATE_KEY || 'self-test-key' }}
+      - run: test -n "${{ steps.lp.outputs.url }}" && echo "link was ${{ steps.lp.outputs.url }}"
+  second-run:
+    needs: first-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the demo stack (empty database)
+        run: docker compose -f examples/demo/docker-compose.yml up -d --wait
+      - uses: ./
+        with:
+          minutes: 1
+          pg-container: demo-db
+          state-key: ${{ secrets.STATE_KEY || 'self-test-key' }}
+      - name: The row from the first run must be back
+        run: |
+          got=$(docker exec demo-db psql -U app -d app -Atc "select v from marker")
+          echo "found: $got"
+          test "$got" = "run-${{ github.run_id }}"

@@ -1,0 +1,73 @@
+name: Live preview
+description: Put a Docker stack that runs on the GitHub runner behind a public Cloudflare quick-tunnel link, keep it up for N minutes, watch it, and optionally keep its Postgres database between runs.
+branding: { icon: globe, color: blue }
+inputs:
+  origin:
+    description: Local address of the app on the runner
+    default: http://127.0.0.1:8080
+  host-header:
+    description: Host header to send to the origin (for a router such as Traefik that routes on the host name)
+    default: ""
+  health-path:
+    description: Path that must answer 200 through the public link
+    default: /
+  health-cmd:
+    description: Optional shell command that must succeed every 30 s (for example a docker exec health probe)
+    default: ""
+  minutes:
+    description: How long the preview stays up (a job can live at most 6 hours)
+    default: "60"
+  cloudflared-version:
+    description: cloudflared release to install
+    default: "2026.10.3"
+  pg-container:
+    description: Name of a Postgres container whose database is saved every 2 minutes and on exit (empty = no persistence)
+    default: ""
+  state-key:
+    description: Secret used to encrypt the saved database; keep the same value between runs
+    default: ""
+  github-token:
+    description: Token with contents:write, used to store the encrypted database on a branch of this repository
+    default: ${{ github.token }}
+  state-branch:
+    description: Branch that holds the encrypted database
+    default: live-preview-state
+outputs:
+  url:
+    description: The public link
+    value: ${{ steps.run.outputs.url }}
+runs:
+  using: composite
+  steps:
+    - name: Install cloudflared
+      shell: bash
+      run: |
+        command -v cloudflared >/dev/null && exit 0
+        curl -fsSL -o "$RUNNER_TEMP/cloudflared.deb" \
+          "https://github.com/cloudflare/cloudflared/releases/download/${{ inputs.cloudflared-version }}/cloudflared-linux-amd64.deb"
+        sudo dpkg -i "$RUNNER_TEMP/cloudflared.deb"
+    - name: Restore the database
+      if: inputs.pg-container != '' && inputs.state-key != ''
+      shell: bash
+      env:
+        PG_CONTAINER: ${{ inputs.pg-container }}
+        STATE_KEY: ${{ inputs.state-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        STATE_BRANCH: ${{ inputs.state-branch }}
+        LP_DIR: ${{ runner.temp }}/live-preview
+      run: bash "${{ github.action_path }}/scripts/state.sh" restore
+    - name: Open the link and keep it up
+      id: run
+      shell: bash
+      env:
+        ORIGIN: ${{ inputs.origin }}
+        HOST_HEADER: ${{ inputs.host-header }}
+        HEALTH_PATH: ${{ inputs.health-path }}
+        HEALTH_CMD: ${{ inputs.health-cmd }}
+        MINUTES: ${{ inputs.minutes }}
+        PG_CONTAINER: ${{ inputs.pg-container }}
+        STATE_KEY: ${{ inputs.state-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        STATE_BRANCH: ${{ inputs.state-branch }}
+        LP_DIR: ${{ runner.temp }}/live-preview
+      run: bash "${{ github.action_path }}/scripts/run.sh"
