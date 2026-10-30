@@ -42,3 +42,15 @@ The link is printed in the log and the job summary, and is the `url` output.
 
 The `self-test` workflow in this repository runs the whole thing twice on clean runners and fails if the row written by
 the first run is missing in the second.
+
+## Example: a public model API (flisk-wolf)
+
+`.github/workflows/flisk-wolf.yml` runs a small model behind an API portal on a runner and puts this action in front of it. Run it with **Actions → flisk-wolf → Run workflow**, then read the link in the job summary and call it:
+
+```bash
+curl https://<the-link>.trycloudflare.com/v1/chat/completions \
+  -H "Authorization: Bearer $WOLF_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"flisk-wolf","messages":[{"role":"user","content":"Write a Flisk service.json for a worker called emailer in the shop stack."}]}'
+```
+
+The repository secret `WOLF_API_KEY` is the only key the portal accepts. The runner has no GPU, so a reply takes tens of seconds, and the model is downloaded again on every run (about 6 GB). The portal comes from [flisk-template-portal](https://github.com/flisk-sh/flisk-template-portal).

@@ -1,0 +1,58 @@
+name: flisk-wolf
+# Runs the flisk-wolf model and its API portal on a GitHub runner and gives it a public https link (this repo's own
+# action). CPU only, so answers take tens of seconds. The link changes every run and the run ends after "minutes".
+# Needs the repository secret WOLF_API_KEY: the one API key the portal accepts. Without it nothing can call the model.
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long the link stays up
+        default: "30"
+permissions:
+  contents: read
+concurrency:
+  group: flisk-wolf
+  cancel-in-progress: false
+jobs:
+  wolf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: flisk-sh/flisk-template-portal
+          ref: 836b7687a8f0426eb07c9c39153e0fd89903b787
+          path: portal
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst | sudo tar --zstd -x -C /usr/local
+          ollama --version
+      - name: Start Ollama and build flisk-wolf
+        run: |
+          nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:11434/api/tags >/dev/null && break; sleep 1; done
+          ollama pull qwen2.5-coder:7b
+          ollama create flisk-wolf -f examples/flisk-wolf/Modelfile
+          ollama list
+      - name: Start the portal (no sign-in; one API key from a secret)
+        env:
+          BOOTSTRAP_API_KEY: ${{ secrets.WOLF_API_KEY }}
+        run: |
+          test -n "$BOOTSTRAP_API_KEY" || { echo "Set the repository secret WOLF_API_KEY first."; exit 1; }
+          cd portal/services/app/web
+          PORT=4000 UPSTREAM_URL=http://127.0.0.1:11434 ALLOWED_MODELS=flisk-wolf PORTAL_NAME="Flisk Inference" DATA_DIR="$RUNNER_TEMP/portal" nohup bun src/index.ts > "$RUNNER_TEMP/portal.log" 2>&1 &
+          for i in $(seq 1 20); do curl -sf localhost:4000/health >/dev/null && break; sleep 1; done
+      - name: Warm the model up
+        env:
+          BOOTSTRAP_API_KEY: ${{ secrets.WOLF_API_KEY }}
+        run: |
+          curl -sf localhost:4000/v1/chat/completions -H "Authorization: Bearer $BOOTSTRAP_API_KEY" -H 'content-type: application/json' \
+            -d '{"model":"flisk-wolf","messages":[{"role":"user","content":"Write a Flisk service.json for a worker called warm in the up stack."}],"max_tokens":64}' | head -c 300
+      - id: lp
+        uses: ./
+        with:
+          origin: http://127.0.0.1:4000
+          health-path: /health
+          minutes: ${{ inputs.minutes }}
