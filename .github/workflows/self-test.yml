@@ -6,6 +6,10 @@ on:
     branches: [main]
 permissions:
   contents: write
+# Both runs share one saved-state branch, so two self-tests must never overlap.
+concurrency:
+  group: self-test
+  cancel-in-progress: false
 jobs:
   first-run:
     runs-on: ubuntu-latest
@@ -13,6 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start the demo stack
         run: |
+          # Start from no saved state: the action restores the saved database when it starts and
+          # would overwrite the marker row written here with the previous run's row.
+          git push origin --delete live-preview-state || true
           docker compose -f examples/demo/docker-compose.yml up -d --wait
           docker exec demo-db psql -U app -d app -c "create table if not exists marker(v text); delete from marker; insert into marker values ('run-${{ github.run_id }}');"
       - id: lp
