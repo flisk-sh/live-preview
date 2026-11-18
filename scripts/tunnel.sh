@@ -14,8 +14,16 @@ args=(tunnel --no-autoupdate --url "$origin")
 setsid nohup cloudflared "${args[@]}" > "$dir/tunnel.log" 2>&1 < /dev/null &
 url=""
 for _ in $(seq 60); do
-  url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$dir/tunnel.log" | head -1 || true)
+  url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$dir/tunnel.log" |
+    grep -vxF 'https://api.trycloudflare.com' | head -1 || true)
   [ -n "$url" ] && break
+  api_error=$(grep -F 'https://api.trycloudflare.com/tunnel' "$dir/tunnel.log" |
+    grep -im1 -E 'error|err |rate.?limit|429' || true)
+  if [ -n "$api_error" ]; then
+    echo "::error::cloudflared could not create a quick tunnel"
+    printf '%s\n' "$api_error"
+    exit 1
+  fi
   sleep 2
 done
 [ -n "$url" ] || { echo "::error::no tunnel URL"; tail -20 "$dir/tunnel.log"; exit 1; }
