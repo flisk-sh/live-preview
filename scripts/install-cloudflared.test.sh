@@ -41,6 +41,58 @@ expect_url aarch64 arm64
 expect_url arm64 arm64
 expect_fail riscv64
 
+# Test checksum mismatch aborts before dpkg and curl receives retry/timeout flags
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+mkdir -p "$tmpdir/bin"
+curl_args_file="$tmpdir/curl_args"
+dpkg_called_file="$tmpdir/dpkg_called"
+
+cat > "$tmpdir/bin/curl" <<EOF
+#!/usr/bin/env bash
+echo "\$*" > "$curl_args_file"
+out=""
+while [ \$# -gt 0 ]; do
+  if [ "\$1" = "-o" ]; then
+    out="\$2"
+    shift 2
+  else
+    shift
+  fi
+done
+printf 'dummy deb content' > "\$out"
+EOF
+chmod +x "$tmpdir/bin/curl"
+
+cat > "$tmpdir/bin/sudo" <<EOF
+#!/usr/bin/env bash
+touch "$dpkg_called_file"
+exit 0
+EOF
+chmod +x "$tmpdir/bin/sudo"
+
+out=$(PATH="$tmpdir/bin:/usr/bin:/bin" UNAME_M=x86_64 CLOUDFLARED_VERSION="$test_version" CLOUDFLARED_SHA256="deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" RUNNER_TEMP="$tmpdir" bash "$script" 2>&1); rc=$?
+if [ "$rc" -eq 0 ]; then
+  fail "checksum mismatch: expected non-zero exit"
+elif [ -f "$dpkg_called_file" ]; then
+  fail "checksum mismatch: dpkg was called despite bad checksum"
+elif [ "${out#*checksum}" = "$out" ]; then
+  fail "checksum mismatch: expected checksum error message, got: $out"
+else
+  pass "checksum mismatch aborts before dpkg"
+fi
+
+if [ -f "$curl_args_file" ]; then
+  curl_args=$(cat "$curl_args_file")
+  if [[ "$curl_args" == *"--retry 3"* ]] && [[ "$curl_args" == *"--connect-timeout 10"* ]] && [[ "$curl_args" == *"--max-time 120"* ]]; then
+    pass "curl invoked with retry and timeout flags"
+  else
+    fail "curl missing retry/timeout flags: $curl_args"
+  fi
+else
+  fail "curl was not invoked"
+fi
+
 if [ "$fails" -ne 0 ]; then
   echo "$fails test(s) failed"
   exit 1
