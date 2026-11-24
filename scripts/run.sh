@@ -7,12 +7,12 @@ here="$(cd "$(dirname "$0")" && pwd)"
 export LP_DIR="${LP_DIR:-$RUNNER_TEMP/live-preview}"
 mkdir -p "$LP_DIR"
 minutes="${MINUTES:-60}"
-until_s=$(( $(date +%s) + minutes * 60 ))
 
 save() { [ -n "${PG_CONTAINER:-}" ] && [ -n "${STATE_KEY:-}" ] && bash "$here/state.sh" save || true; }
 trap 'save' EXIT
 
 bash "$here/tunnel.sh" || exit 1
+until_s=$(( $(date +%s) + minutes * 60 ))
 url=$(cat "$LP_DIR/url")
 echo "url=$url" >> "${GITHUB_OUTPUT:-/dev/null}"
 {

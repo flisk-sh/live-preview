@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/tunnel.test.sh
+      - run: bash scripts/run.test.sh
 
   codeql:
     permissions:
